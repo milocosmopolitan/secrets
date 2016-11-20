@@ -9,27 +9,31 @@ const Comment = models.Comment;
 
 router.get('/', function (req, res, next) {	
 
-	let secrets, offset = 0, limit = 5;
-
-	if(req.query.page) offset = req.query.page;
+	let secrets, limit = 5,
+		// set current page number as 'page' key exist in reqest.query or 1 if doesn't exist
+		currentPage = parseInt(req.query.page) || 1,		
+		offset = req.query.page ? (currentPage-1 < 0 ? 0 : currentPage-1) * limit : 0;
 
 	Secret.findAll({
 		order: '"createdAt" DESC',
 		limit: limit,
-		offset: (offset-1 < 0 ? 0 : offset-1) * limit
-	})
-	.then((data)=>{
+		offset: offset
+	}).then((data)=>{
 		secrets = data;
-		return Secret.count()
-	})
-	.then((data)=>{
-		
-		console.log(data);
+		if(secrets.length===0) throw new Error('no secrets');
+
+		// get total number of rows in secret table
+		return Secret.count();
+	}).then((data)=>{
+		let totalPages = Math.ceil(data/limit);
+		if(currentPage > totalPages) currentPage = totalPages;
 		res.render('index', {
 			secrets: secrets,
-			page: parseInt(req.query.page),
-			totalPages: Math.ceil(data/limit)
+			page: currentPage,
+			totalPages: totalPages
 		});
+	}).catch(()=>{
+		res.render('index');
 	});
 });
 
@@ -42,16 +46,19 @@ router.get('/:secretId', function (req, res, next) {
 
 	Secret.findById(req.params.secretId)
 	.then((secret)=>{
+		if(!secret) throw new Error('Secret ID ' + req.params.secretId +' does not exist');
+		
 		data = secret
 		return Comment.findAll({
 			where:{
 				secretId: req.params.secretId
 			}
 		})
-	})
-	.then((comments)=>{
+	}).then((comments)=>{
 		data.comments = comments;		
 		res.render('secret', {secret: data});
+	})	.catch(()=>{
+		res.redirect('/');
 	});
 });
 
